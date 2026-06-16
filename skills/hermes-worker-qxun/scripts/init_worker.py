@@ -13,6 +13,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from hermes_worker_lib import parse_mapping
+
 
 DEFAULT_API = "http://81.71.29.84:8787"
 CONFIG_DIR = Path.home() / ".hermes-codex-worker"
@@ -32,13 +34,7 @@ def post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def parse_project(values: list[str]) -> dict[str, str]:
-    projects: dict[str, str] = {}
-    for value in values:
-        if "=" not in value:
-            raise SystemExit(f"--project must be name=/path, got: {value}")
-        key, path = value.split("=", 1)
-        projects[key.strip()] = str(Path(path).expanduser())
-    return projects
+    return {key: str(Path(path).expanduser()) for key, path in parse_mapping(values).items()}
 
 
 def guess_projects() -> dict[str, str]:
@@ -77,6 +73,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--display-name", default="")
     parser.add_argument("--server-api", default=os.getenv("HERMES_WORKER_API", DEFAULT_API))
     parser.add_argument("--project", action="append", default=[], help="Project mapping, e.g. docs=/path/to/Docs")
+    parser.add_argument("--build", action="append", default=[], help="Build command mapping, e.g. qxun='pnpm build'")
+    parser.add_argument("--dist", action="append", default=[], help="Dist directory mapping, e.g. qxun=dist")
     parser.add_argument("--no-guess", action="store_true", help="Do not guess local project paths.")
     args = parser.parse_args(argv)
 
@@ -90,11 +88,20 @@ def main(argv: list[str]) -> int:
         local_projects = {**guess_projects(), **local_projects}
     local_projects.update(parse_project(args.project))
 
+    project_builds = existing.get("project_builds") if isinstance(existing.get("project_builds"), dict) else {}
+    for key, command in parse_mapping(args.build).items():
+        project_builds.setdefault(key, {})
+        project_builds[key]["build_command"] = command
+    for key, dist_dir in parse_mapping(args.dist).items():
+        project_builds.setdefault(key, {})
+        project_builds[key]["dist_dir"] = dist_dir
+
     config = {
         "worker_id": worker_id,
         "display_name": args.display_name or existing.get("display_name") or worker_id,
         "server_api": args.server_api.rstrip("/"),
         "local_projects": local_projects,
+        "project_builds": project_builds,
     }
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)

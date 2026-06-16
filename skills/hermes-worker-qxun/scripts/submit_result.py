@@ -40,17 +40,24 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--preview-url", default="")
     parser.add_argument("--doc-path", default="")
     parser.add_argument("--commit", default="")
+    parser.add_argument("--manifest", default="", help="Preview manifest path from build/upload scripts.")
     args = parser.parse_args(argv)
 
     config = load_config()
+    manifest: dict[str, Any] = {}
+    if args.manifest:
+        manifest = json.loads(Path(args.manifest).expanduser().read_text(encoding="utf-8"))
+    git = manifest.get("git") if isinstance(manifest.get("git"), dict) else {}
     payload = {
         "worker_id": config["worker_id"],
         "task_id": args.task_id,
         "status": args.status,
         "summary": args.summary,
-        "preview_url": args.preview_url,
+        "preview_url": args.preview_url or str(manifest.get("preview_url") or ""),
         "doc_path": args.doc_path,
-        "commit": args.commit,
+        "commit": args.commit or str(git.get("commit") or ""),
+        "branch": str(git.get("branch") or ""),
+        "preview_manifest": manifest,
     }
     result = post_json(f"{config['server_api'].rstrip('/')}/api/results", payload)
     print(json.dumps(result, ensure_ascii=False, indent=2))

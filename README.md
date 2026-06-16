@@ -16,7 +16,13 @@ After installation, restart Codex and initialize the worker:
 Hermes worker init <your_worker_id>
 ```
 
-Then claim tasks with:
+Then start the automatic local worker:
+
+```text
+Hermes worker start
+```
+
+Or claim one task manually with:
 
 ```text
 领取 Hermes 任务
