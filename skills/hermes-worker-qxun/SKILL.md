@@ -7,6 +7,18 @@ description: Initialize and run a local automatic Codex worker for the QXun Herm
 
 Use this skill when the user wants this local Codex to join the QXun Hermes workflow, run as an automatic local worker, or process a task assigned from Feishu.
 
+## Workflow Model
+
+Hermes cloud is the owner of Feishu intake and the Docs repository:
+
+1. A user mentions Hermes in Feishu.
+2. Hermes cloud converts the request into a Markdown requirement/task.
+3. Hermes cloud commits that Markdown to the CNB Docs repository.
+4. Local Codex workers register with Hermes using their Feishu nickname.
+5. Local Codex workers claim tasks assigned to their nickname, edit local code projects such as QXunPortal, build previews, upload previews through Hermes-issued URLs, and report results back to Hermes.
+
+Do not ask the user for a local Docs repository path during worker init. Docs is a cloud-side source of truth managed by Hermes. Local Codex only needs local code project paths for projects it can execute, such as `qxun`.
+
 ## What This Skill Does
 
 - Initializes local worker config at `~/.hermes-codex-worker/config.json`.
@@ -34,19 +46,32 @@ When the user says `Hermes worker init`, `加入 Hermes worker`, or wants to con
 请关联你的飞书昵称
 ```
 
-2. Use that Feishu nickname as the worker id. Run `scripts/init_worker.py --worker <飞书昵称>`.
-3. If the user knows local project paths and build settings, pass them with:
+2. Use that Feishu nickname as the worker id.
+3. If the current working directory is QXunPortal, run the short init command from that directory:
+
+```bash
+python3 scripts/init_worker.py --worker <飞书昵称>
+```
+
+The script auto-detects QXunPortal and configures:
+
+```text
+qxun=<current QXunPortal path>
+build=pnpm build:h5:candidate
+dist=apps/h5-candidate/dist
+```
+
+4. If the current directory is not QXunPortal, pass only the local code project path and build settings:
 
 ```bash
 python3 scripts/init_worker.py \
   --worker <飞书昵称> \
-  --project docs=/path/to/Docs \
   --project qxun=/path/to/QXunPortal \
-  --build qxun="pnpm build" \
-  --dist qxun=dist
+  --build qxun="pnpm build:h5:candidate" \
+  --dist qxun=apps/h5-candidate/dist
 ```
 
-4. If paths are missing, ask for them later only when a task needs that project.
+Do not configure a local `docs` path for Feishu requirement intake. Hermes cloud writes Markdown to the Docs repository.
 
 The init script also supports interactive setup from a terminal:
 
@@ -189,13 +214,12 @@ Minimum content:
   "worker_id": "jerry",
   "server_api": "http://81.71.29.84:8787",
   "local_projects": {
-    "docs": "/Users/name/Documents/app/Docs",
     "qxun": "/Users/name/Documents/app/QXunPortal"
   },
   "project_builds": {
     "qxun": {
-      "build_command": "pnpm build",
-      "dist_dir": "dist"
+      "build_command": "pnpm build:h5:candidate",
+      "dist_dir": "apps/h5-candidate/dist"
     }
   }
 }

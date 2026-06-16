@@ -46,16 +46,33 @@ def parse_project(values: list[str]) -> dict[str, str]:
     return {key: str(Path(path).expanduser()) for key, path in parse_mapping(values).items()}
 
 
+def infer_qxun_project(cwd: Path | None = None) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+    project_path = (cwd or Path.cwd()).resolve()
+    package_json = project_path / "package.json"
+    candidate_app = project_path / "apps" / "h5-candidate"
+    if not package_json.exists() or not candidate_app.exists():
+        return {}, {}
+    try:
+        package = json.loads(package_json.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}, {}
+    if package.get("name") != "qianxun-monorepo":
+        return {}, {}
+    return (
+        {"qxun": str(project_path)},
+        {"qxun": {
+            "build_command": "pnpm build:h5:candidate",
+            "dist_dir": "apps/h5-candidate/dist",
+        }},
+    )
+
+
 def guess_projects() -> dict[str, str]:
     candidates = {
-        "docs": [
-            Path.home() / "Documents/app/Docs",
-            Path.home() / "Documents/Docs",
-        ],
         "qxun": [
             Path.home() / "Documents/app/QXunPortal",
             Path.home() / "Documents/app/QXunPortalH5C",
-            Path.home() / "Documents/app",
+            Path.home() / "QXunPortal",
         ],
     }
     found: dict[str, str] = {}
@@ -95,12 +112,18 @@ def main(argv: list[str]) -> int:
         raise SystemExit("请关联你的飞书昵称：重新运行并传入 --worker <飞书昵称>，或在交互式终端中按提示输入。")
 
     existing = load_existing()
+    inferred_projects: dict[str, str] = {}
+    inferred_builds: dict[str, dict[str, str]] = {}
+    if not args.no_guess:
+        inferred_projects, inferred_builds = infer_qxun_project()
+
     local_projects = existing.get("local_projects") if isinstance(existing.get("local_projects"), dict) else {}
     if not args.no_guess:
-        local_projects = {**guess_projects(), **local_projects}
+        local_projects = {**guess_projects(), **inferred_projects, **local_projects}
     local_projects.update(parse_project(args.project))
 
     project_builds = existing.get("project_builds") if isinstance(existing.get("project_builds"), dict) else {}
+    project_builds = {**inferred_builds, **project_builds}
     for key, command in parse_mapping(args.build).items():
         project_builds.setdefault(key, {})
         project_builds[key]["build_command"] = command
@@ -110,7 +133,7 @@ def main(argv: list[str]) -> int:
 
     config = {
         "worker_id": worker_id,
-        "display_name": args.display_name or existing.get("display_name") or worker_id,
+        "display_name": args.display_name or worker_id,
         "server_api": args.server_api.rstrip("/"),
         "local_projects": local_projects,
         "project_builds": project_builds,

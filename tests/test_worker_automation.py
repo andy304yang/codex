@@ -16,12 +16,31 @@ from hermes_worker_lib import (  # noqa: E402
     render_codex_task_prompt,
     resolve_project_context,
 )
-from init_worker import normalize_worker_id  # noqa: E402
+from init_worker import infer_qxun_project, normalize_worker_id  # noqa: E402
 
 
 class WorkerAutomationTests(unittest.TestCase):
     def test_normalize_worker_id_uses_feishu_nickname(self):
         self.assertEqual(normalize_worker_id(" Andy "), "andy")
+
+    def test_infer_qxun_project_from_current_monorepo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "apps" / "h5-candidate").mkdir(parents=True)
+            (project / "package.json").write_text(
+                json.dumps({"name": "qianxun-monorepo"}),
+                encoding="utf-8",
+            )
+
+            projects, builds = infer_qxun_project(project)
+
+            self.assertEqual(projects, {"qxun": str(project.resolve())})
+            self.assertEqual(builds, {
+                "qxun": {
+                    "build_command": "pnpm build:h5:candidate",
+                    "dist_dir": "apps/h5-candidate/dist",
+                }
+            })
 
     def test_parse_mapping_requires_name_value_pairs(self):
         self.assertEqual(parse_mapping(["qxun=pnpm build", "docs=make html"]), {
