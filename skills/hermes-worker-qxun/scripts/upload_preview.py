@@ -70,6 +70,7 @@ def cos_config(config: dict[str, Any]) -> dict[str, str]:
         "secret_key": str(os.getenv("TENCENTCLOUD_SECRET_KEY") or os.getenv("COS_SECRET_KEY") or ""),
         "public_base_url": str(os.getenv("HERMES_COS_PUBLIC_BASE_URL") or cos_upload.get("public_base_url") or ""),
         "signed_get_expires": str(os.getenv("HERMES_COS_SIGNED_GET_EXPIRES") or cos_upload.get("signed_get_expires") or "604800"),
+        "acl": str(os.getenv("HERMES_COS_ACL") or cos_upload.get("acl") or "public-read"),
     }
 
 
@@ -177,23 +178,29 @@ def upload_to_cos(manifest: dict[str, Any], config: dict[str, Any]) -> dict[str,
     for file_info in manifest["files"]:
         relative_path = str(file_info["path"]).lstrip("/")
         key = f"{prefix}/{relative_path}"
-        client.put_object(
-            Bucket=cos["bucket"],
-            Key=key,
-            Body=(dist_path / relative_path).read_bytes(),
-            ContentType=file_info.get("content_type") or "application/octet-stream",
-        )
+        put_kwargs = {
+            "Bucket": cos["bucket"],
+            "Key": key,
+            "Body": (dist_path / relative_path).read_bytes(),
+            "ContentType": file_info.get("content_type") or "application/octet-stream",
+        }
+        if cos["acl"]:
+            put_kwargs["ACL"] = cos["acl"]
+        client.put_object(**put_kwargs)
         uploaded.append(key)
 
     base_url = cos["public_base_url"].rstrip("/") if cos["public_base_url"] else f"https://{cos['bucket']}.cos.{cos['region']}.myqcloud.com"
     index_key = f"{prefix}/index.html"
     object_url = f"{base_url}/{urllib.parse.quote(index_key, safe='/-_.~')}"
-    preview_url = client.get_presigned_url(
-        Method="GET",
-        Bucket=cos["bucket"],
-        Key=index_key,
-        Expired=int(cos["signed_get_expires"]),
-    )
+    if cos["acl"] == "public-read":
+        preview_url = object_url
+    else:
+        preview_url = client.get_presigned_url(
+            Method="GET",
+            Bucket=cos["bucket"],
+            Key=index_key,
+            Expired=int(cos["signed_get_expires"]),
+        )
     manifest["build_id"] = build_id
     manifest["preview_url"] = preview_url
     manifest["cos"] = {
@@ -201,6 +208,7 @@ def upload_to_cos(manifest: dict[str, Any], config: dict[str, Any]) -> dict[str,
         "region": cos["region"],
         "prefix": prefix,
         "object_url": object_url,
+        "acl": cos["acl"],
         "signed_get_expires": int(cos["signed_get_expires"]),
         "uploaded_files": uploaded,
     }
