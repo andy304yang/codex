@@ -21,6 +21,15 @@ CONFIG_DIR = Path.home() / ".hermes-codex-worker"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
 
+def normalize_worker_id(value: str) -> str:
+    return value.strip().lower()
+
+
+def prompt_worker_id() -> str:
+    print("请关联你的飞书昵称，用于 Hermes 将 Feishu 任务分配给这台本地 Codex worker。")
+    return normalize_worker_id(input("飞书昵称: "))
+
+
 def post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
@@ -69,7 +78,8 @@ def load_existing() -> dict[str, Any]:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Initialize Hermes Worker config.")
-    parser.add_argument("--worker", required=True, help="Worker id, e.g. jerry or andy.")
+    parser.add_argument("--worker", default="", help="Feishu nickname / worker id, e.g. jerry or andy.")
+    parser.add_argument("--feishu-nickname", default="", help="Alias for --worker.")
     parser.add_argument("--display-name", default="")
     parser.add_argument("--server-api", default=os.getenv("HERMES_WORKER_API", DEFAULT_API))
     parser.add_argument("--project", action="append", default=[], help="Project mapping, e.g. docs=/path/to/Docs")
@@ -78,9 +88,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--no-guess", action="store_true", help="Do not guess local project paths.")
     args = parser.parse_args(argv)
 
-    worker_id = args.worker.strip().lower()
+    worker_id = normalize_worker_id(args.worker or args.feishu_nickname)
+    if not worker_id and sys.stdin.isatty():
+        worker_id = prompt_worker_id()
     if not worker_id:
-        raise SystemExit("worker id is required")
+        raise SystemExit("请关联你的飞书昵称：重新运行并传入 --worker <飞书昵称>，或在交互式终端中按提示输入。")
 
     existing = load_existing()
     local_projects = existing.get("local_projects") if isinstance(existing.get("local_projects"), dict) else {}

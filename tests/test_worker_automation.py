@@ -16,9 +16,13 @@ from hermes_worker_lib import (  # noqa: E402
     render_codex_task_prompt,
     resolve_project_context,
 )
+from init_worker import normalize_worker_id  # noqa: E402
 
 
 class WorkerAutomationTests(unittest.TestCase):
+    def test_normalize_worker_id_uses_feishu_nickname(self):
+        self.assertEqual(normalize_worker_id(" Andy "), "andy")
+
     def test_parse_mapping_requires_name_value_pairs(self):
         self.assertEqual(parse_mapping(["qxun=pnpm build", "docs=make html"]), {
             "qxun": "pnpm build",

@@ -26,21 +26,40 @@ http://81.71.29.84:8787
 
 ## Initialize
 
-When the user says `Hermes worker init <worker_id>`:
+When the user says `Hermes worker init`, `加入 Hermes worker`, or wants to connect local Codex to Feishu:
 
-1. Run `scripts/init_worker.py --worker <worker_id>`.
-2. If the user knows local project paths and build settings, pass them with:
+1. If the user did not provide a Feishu nickname / worker id, ask exactly:
+
+```text
+请关联你的飞书昵称
+```
+
+2. Use that Feishu nickname as the worker id. Run `scripts/init_worker.py --worker <飞书昵称>`.
+3. If the user knows local project paths and build settings, pass them with:
 
 ```bash
 python3 scripts/init_worker.py \
-  --worker jerry \
+  --worker <飞书昵称> \
   --project docs=/path/to/Docs \
   --project qxun=/path/to/QXunPortal \
   --build qxun="pnpm build" \
   --dist qxun=dist
 ```
 
-3. If paths are missing, ask for them later only when a task needs that project.
+4. If paths are missing, ask for them later only when a task needs that project.
+
+The init script also supports interactive setup from a terminal:
+
+```bash
+python3 scripts/init_worker.py
+```
+
+It will prompt:
+
+```text
+请关联你的飞书昵称，用于 Hermes 将 Feishu 任务分配给这台本地 Codex worker。
+飞书昵称:
+```
 
 To update project config after initialization, run:
 
