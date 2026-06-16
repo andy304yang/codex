@@ -424,10 +424,10 @@ def render_codex_task_prompt(
 python3 {shell_join([str(build_script), "--task-file", str(task_run_dir(task) / "task.json")])}
 ```
 
-5. Upload the preview artifact with:
+5. Deploy the preview artifact to the configured Nginx preview site with:
 
 ```bash
-python3 {shell_join([str(upload_script), "--manifest", str(task_run_dir(task) / "preview_manifest.json"), "--fallback-cos"])}
+python3 {shell_join([str(upload_script), "--manifest", str(task_run_dir(task) / "preview_manifest.json"), "--nginx"])}
 ```
 
 6. Submit the final Hermes result with `{submit_script}`. Include the preview_url if upload succeeds."""

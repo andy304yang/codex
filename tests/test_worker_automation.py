@@ -19,6 +19,7 @@ from hermes_worker_lib import (  # noqa: E402
     resolve_project_context,
     update_docs_task_status,
 )
+from upload_preview import upload_to_nginx  # noqa: E402
 
 
 class WorkerAutomationTests(unittest.TestCase):
@@ -151,6 +152,46 @@ assignee: "jerry"
             self.assertIn("build_preview.py", prompt)
             self.assertIn("upload_preview.py", prompt)
             self.assertIn(json.dumps(task, ensure_ascii=False, indent=2), prompt)
+
+    def test_upload_to_nginx_copies_dist_and_rewrites_index_assets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dist = root / "dist"
+            site = root / "site"
+            (dist / "assets").mkdir(parents=True)
+            (dist / "index.html").write_text(
+                '<link href="/assets/app.css"><script src="/assets/app.js"></script>',
+                encoding="utf-8",
+            )
+            (dist / "assets" / "app.css").write_text("body{}", encoding="utf-8")
+            (dist / "assets" / "app.js").write_text("console.log(1)", encoding="utf-8")
+            manifest = {
+                "task_id": "task 4",
+                "build_id": "build 1",
+                "dist_path": str(dist),
+                "files": [
+                    {"path": "assets/app.css"},
+                    {"path": "assets/app.js"},
+                    {"path": "index.html"},
+                ],
+            }
+            config = {
+                "nginx_preview": {
+                    "public_base_url": "http://preview.test",
+                    "prefix": "hermes-previews",
+                    "local_root": str(site),
+                },
+            }
+
+            result = upload_to_nginx(manifest, config)
+
+            index = site / "hermes-previews" / "task-4" / "build-1" / "index.html"
+            self.assertTrue(index.exists())
+            self.assertIn('href="./assets/app.css"', index.read_text(encoding="utf-8"))
+            self.assertEqual(
+                result["preview_url"],
+                "http://preview.test/hermes-previews/task-4/build-1/index.html",
+            )
 
 
 if __name__ == "__main__":

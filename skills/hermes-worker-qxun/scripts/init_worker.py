@@ -103,6 +103,8 @@ def main(argv: list[str]) -> int:
             "region": "ap-guangzhou",
             "prefix": "hermes-previews",
         },
+        "preview_provider": existing.get("preview_provider") or "nginx",
+        "nginx_preview": existing.get("nginx_preview") if isinstance(existing.get("nginx_preview"), dict) else {},
         "local_projects": local_projects,
         "project_builds": project_builds,
     }

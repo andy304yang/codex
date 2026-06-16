@@ -15,6 +15,7 @@ Use this skill when the user wants this local Codex to join the QXun Hermes work
 - Runs Codex on the Docs repository for document/product tasks when no local code project is configured.
 - Optionally resolves tasks to configured local project paths for frontend/backend code work.
 - Optionally builds local `dist`/HTML previews before merge.
+- Deploys previews to an Nginx static site so HTML/CSS/JS can be opened as a real web page.
 - Reports result status, summaries, commits, and preview URLs back to the Docs task Markdown.
 
 Default Docs queue:
@@ -52,6 +53,18 @@ python3 scripts/configure_project.py \
   --project qxun=/path/to/QXunPortal \
   --build qxun="pnpm build:h5:candidate" \
   --dist qxun=apps/h5-candidate/dist
+```
+
+If previews should be hosted on an Nginx server, configure only deploy metadata. Do not put server passwords in this config; SSH should use the user's key/agent or a key path:
+
+```bash
+python3 scripts/configure_preview.py \
+  --provider nginx \
+  --base-url http://43.136.77.201 \
+  --prefix hermes-previews \
+  --remote-host 43.136.77.201 \
+  --remote-user ubuntu \
+  --remote-root /var/www/html
 ```
 
 ## Start Automatic Worker
@@ -129,17 +142,32 @@ This writes:
 
 The manifest includes `task_id`, `worker_id`, project path, build command, dist path, git branch/commit, and the list of static files with content types.
 
-## Upload Preview
+## Deploy Preview
 
-Upload the built `dist`/HTML through Hermes-issued presigned COS upload URLs:
+Deploy the built `dist`/HTML to the configured Nginx static site:
 
 ```bash
 python3 scripts/upload_preview.py \
   --manifest ~/.hermes-codex-worker/runs/<task_id>/preview_manifest.json \
-  --fallback-cos
+  --nginx
 ```
 
-The upload flow expects Hermes to provide:
+The Nginx deploy flow:
+
+- copies every file in `dist` to `<remote-root>/<prefix>/<task_id>/<build_id>/`;
+- rewrites root-relative `src="/..."` and `href="/..."` in `index.html` to relative paths, so CSS/JS load under the preview subdirectory;
+- returns `<base-url>/<prefix>/<task_id>/<build_id>/index.html` as `preview_url`.
+
+For a dry run that shows the SSH/rsync commands without publishing:
+
+```bash
+python3 scripts/upload_preview.py \
+  --manifest ~/.hermes-codex-worker/runs/<task_id>/preview_manifest.json \
+  --nginx \
+  --dry-run
+```
+
+The older Hermes/COS upload flow is still available when a Hermes preview API exists. It expects Hermes to provide:
 
 - `POST /api/previews/create-upload`: receives file metadata and returns `build_id`, `preview_url`, and per-file presigned `PUT` URLs.
 - `POST /api/previews/complete`: marks upload complete and returns the final `preview_url`.
@@ -212,9 +240,18 @@ Minimum content:
       "build_command": "pnpm build",
       "dist_dir": "dist"
     }
+  },
+  "preview_provider": "nginx",
+  "nginx_preview": {
+    "public_base_url": "http://43.136.77.201",
+    "prefix": "hermes-previews",
+    "remote_host": "43.136.77.201",
+    "remote_user": "ubuntu",
+    "remote_root": "/var/www/html",
+    "ssh_port": "22"
   }
 }
 ```
 
 Do not store CNB tokens or server SSH keys in this config. Git authentication should use the user's existing Git credential helper or `~/.netrc`.
-Do not store COS permanent keys in this config; use Hermes-issued temporary upload URLs.
+Do not store server passwords or COS permanent keys in this config; use SSH keys/agent for Nginx and Hermes-issued temporary upload URLs for COS.
