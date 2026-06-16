@@ -24,6 +24,14 @@ https://cnb.cool/yztx_qxun/Docs
 tasks/*.md
 ```
 
+Feishu task messages should stay short. Users do not need to provide `项目` or `类型`; Hermes infers the default project from the Feishu/Hermes deployment context and infers task type from the request text. A normal task can be:
+
+```text
+新增任务
+分配给：jerry
+需求：把 html 的标题从 千寻求职者端 改成 千寻求职
+```
+
 ## Initialize
 
 When the user says `Hermes worker init <worker_id>` or `使用 hermes-worker-qxun 初始化 Hermes worker`:
