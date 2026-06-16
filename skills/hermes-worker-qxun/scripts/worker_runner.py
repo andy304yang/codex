@@ -5,23 +5,17 @@ from __future__ import annotations
 
 import argparse
 import json
-import socket
 import sys
 import urllib.request
 from pathlib import Path
 from typing import Any
 
+from hermes_worker_lib import claim_docs_task, load_config
 
 CONFIG_DIR = Path.home() / ".hermes-codex-worker"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 TASK_DIR = CONFIG_DIR / "tasks"
 CURRENT_TASK = TASK_DIR / "current_task.json"
-
-
-def load_config() -> dict[str, Any]:
-    if not CONFIG_PATH.exists():
-        raise SystemExit(f"Missing config: {CONFIG_PATH}. Run hermes worker init first.")
-    return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 
 
 def post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -39,25 +33,18 @@ def post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Claim one Hermes task.")
     parser.add_argument("--include-unassigned", action="store_true")
+    parser.add_argument("--source", choices=["docs", "api"], default="docs")
     args = parser.parse_args(argv)
 
     config = load_config()
-    worker_id = config["worker_id"]
-    server_api = config["server_api"].rstrip("/")
-    projects = config.get("local_projects", {})
-
-    heartbeat = {
-        "worker_id": worker_id,
-        "hostname": socket.gethostname(),
-        "projects": projects,
-        "codex": {"skill": "hermes-worker-qxun"},
-    }
-    post_json(f"{server_api}/api/heartbeat", heartbeat)
-
-    result = post_json(
-        f"{server_api}/api/tasks/claim",
-        {"worker_id": worker_id, "include_unassigned": bool(args.include_unassigned)},
-    )
+    if args.source == "docs":
+        result = claim_docs_task(config, include_unassigned=bool(args.include_unassigned))
+    else:
+        server_api = config["server_api"].rstrip("/")
+        result = post_json(
+            f"{server_api}/api/tasks/claim",
+            {"worker_id": config["worker_id"], "include_unassigned": bool(args.include_unassigned)},
+        )
     TASK_DIR.mkdir(parents=True, exist_ok=True)
     if result.get("has_task"):
         CURRENT_TASK.write_text(json.dumps(result["task"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

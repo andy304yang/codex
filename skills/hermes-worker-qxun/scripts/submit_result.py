@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from hermes_worker_lib import update_docs_task_status
 
 CONFIG_PATH = Path.home() / ".hermes-codex-worker" / "config.json"
 
@@ -59,8 +60,26 @@ def main(argv: list[str]) -> int:
         "branch": str(git.get("branch") or ""),
         "preview_manifest": manifest,
     }
-    result = post_json(f"{config['server_api'].rstrip('/')}/api/results", payload)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    api_result: dict[str, Any] = {}
+    if config.get("server_api"):
+        try:
+            api_result = post_json(f"{config['server_api'].rstrip('/')}/api/results", payload)
+        except Exception as exc:
+            api_result = {"ok": False, "error": str(exc)}
+
+    docs_result = update_docs_task_status(
+        config,
+        args.task_id,
+        args.status,
+        {
+            "result_summary": "；".join(args.summary),
+            "preview_url": payload["preview_url"],
+            "commit": payload["commit"],
+            "branch": payload["branch"],
+            "completed_by": config["worker_id"],
+        },
+    )
+    print(json.dumps({"ok": True, "api": api_result, "docs": docs_result}, ensure_ascii=False, indent=2))
     return 0
 
 

@@ -1,4 +1,5 @@
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,36 +12,60 @@ sys.path.insert(0, str(SCRIPTS))
 
 from hermes_worker_lib import (  # noqa: E402
     content_type_for,
+    claim_docs_task,
     list_dist_files,
     parse_mapping,
     render_codex_task_prompt,
     resolve_project_context,
+    update_docs_task_status,
 )
-from init_worker import infer_qxun_project, normalize_worker_id  # noqa: E402
 
 
 class WorkerAutomationTests(unittest.TestCase):
-    def test_normalize_worker_id_uses_feishu_nickname(self):
-        self.assertEqual(normalize_worker_id(" Andy "), "andy")
-
-    def test_infer_qxun_project_from_current_monorepo(self):
+    def test_claim_and_update_docs_task_queue(self):
         with tempfile.TemporaryDirectory() as tmp:
-            project = Path(tmp)
-            (project / "apps" / "h5-candidate").mkdir(parents=True)
-            (project / "package.json").write_text(
-                json.dumps({"name": "qianxun-monorepo"}),
+            origin = Path(tmp) / "origin.git"
+            seed = Path(tmp) / "seed"
+            cache = Path(tmp) / "cache"
+            subprocess.run(["git", "init", "--bare", "--initial-branch=main", str(origin)], check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(["git", "clone", str(origin), str(seed)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=seed, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=seed, check=True)
+            (seed / "tasks").mkdir()
+            (seed / "tasks" / "task-1.md").write_text(
+                """---
+id: "task-1"
+status: open
+project: "product"
+type: "requirement"
+assignee: "jerry"
+---
+# 写产品文档
+更新说明。
+""",
                 encoding="utf-8",
             )
+            subprocess.run(["git", "add", "."], cwd=seed, check=True)
+            subprocess.run(["git", "commit", "-m", "seed"], cwd=seed, check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(["git", "push", "origin", "HEAD:main"], cwd=seed, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            projects, builds = infer_qxun_project(project)
+            config = {
+                "worker_id": "jerry",
+                "docs_queue": {
+                    "repo_url": str(origin),
+                    "repo_dir": str(cache),
+                    "task_dir": "tasks",
+                },
+            }
 
-            self.assertEqual(projects, {"qxun": str(project.resolve())})
-            self.assertEqual(builds, {
-                "qxun": {
-                    "build_command": "pnpm build:h5:candidate",
-                    "dist_dir": "apps/h5-candidate/dist",
-                }
-            })
+            claimed = claim_docs_task(config)
+            self.assertTrue(claimed["has_task"])
+            self.assertEqual(claimed["task"]["id"], "task-1")
+            self.assertIn('status: "claimed"', (cache / "tasks" / "task-1.md").read_text(encoding="utf-8"))
+
+            updated = update_docs_task_status(config, "task-1", "done", {"result_summary": "ok"})
+            self.assertTrue(updated["ok"])
+            self.assertIn('status: "done"', (cache / "tasks" / "task-1.md").read_text(encoding="utf-8"))
 
     def test_parse_mapping_requires_name_value_pairs(self):
         self.assertEqual(parse_mapping(["qxun=pnpm build", "docs=make html"]), {

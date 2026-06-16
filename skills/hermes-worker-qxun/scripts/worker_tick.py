@@ -21,6 +21,10 @@ from typing import Any
 from hermes_worker_lib import (
     CONFIG_DIR,
     LOG_DIR,
+    ProjectContext,
+    claim_docs_task,
+    docs_queue_config,
+    ensure_docs_repo,
     load_config,
     render_codex_task_prompt,
     resolve_project_context,
@@ -68,6 +72,17 @@ def claim_task(config: dict[str, Any], include_unassigned: bool) -> dict[str, An
     )
 
 
+def docs_context(config: dict[str, Any]) -> ProjectContext:
+    repo_dir = ensure_docs_repo(config)
+    queue = docs_queue_config(config)
+    return ProjectContext(
+        project_key="docs",
+        project_path=repo_dir,
+        build_command="",
+        dist_dir=queue["task_dir"],
+    )
+
+
 def run_codex(
     codex_bin: str,
     project_path: Path,
@@ -108,6 +123,7 @@ def run_codex(
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Run one automatic Hermes worker tick.")
     parser.add_argument("--include-unassigned", action="store_true")
+    parser.add_argument("--source", choices=["docs", "api"], default="docs")
     parser.add_argument("--exec-codex", action="store_true", help="Run codex exec for the claimed task.")
     parser.add_argument("--codex-bin", default=shutil.which("codex") or "codex")
     parser.add_argument("--sandbox", default="workspace-write", choices=["read-only", "workspace-write", "danger-full-access"])
@@ -119,13 +135,19 @@ def main(argv: list[str]) -> int:
 
     config = load_config()
     scripts_dir = Path(__file__).resolve().parent
-    result = claim_task(config, args.include_unassigned)
+    if args.source == "docs":
+        result = claim_docs_task(config, args.include_unassigned)
+    else:
+        result = claim_task(config, args.include_unassigned)
     if not result.get("has_task"):
         print(json.dumps({"ok": True, "has_task": False}, ensure_ascii=False, indent=2))
         return 0
 
     task = result["task"]
-    context = resolve_project_context(task, config)
+    try:
+        context = resolve_project_context(task, config)
+    except SystemExit:
+        context = docs_context(config)
     run_dir = task_run_dir(task)
     task_file = run_dir / "task.json"
     prompt_file = run_dir / "codex_prompt.md"

@@ -1,106 +1,57 @@
 ---
 name: hermes-worker-qxun
-description: Initialize and run a local automatic Codex worker for the QXun Hermes workflow. Use when a developer says "Hermes worker init", "Hermes worker start", "加入 Hermes worker", "领取 Hermes 任务", or needs Codex to claim Feishu-assigned tasks, edit local projects, build dist/html previews, upload previews to COS through Hermes-issued URLs, and report results back to the cloud Hermes Worker API.
+description: Initialize and run a local automatic Codex worker for the QXun Hermes workflow. Use when a user says "Hermes worker init", "Hermes worker start", "加入 Hermes worker", "领取 Hermes 任务", or needs Codex to pull Feishu-assigned Markdown tasks from the CNB Docs repository, claim tasks assigned to the local Feishu nickname, optionally execute local project work, build previews, and write task status back to Docs.
 ---
 
 # Hermes Worker QXun
 
 Use this skill when the user wants this local Codex to join the QXun Hermes workflow, run as an automatic local worker, or process a task assigned from Feishu.
 
-## Workflow Model
-
-Hermes cloud is the owner of Feishu intake and the Docs repository:
-
-1. A user mentions Hermes in Feishu.
-2. Hermes cloud converts the request into a Markdown requirement/task.
-3. Hermes cloud commits that Markdown to the CNB Docs repository.
-4. Local Codex workers register with Hermes using their Feishu nickname.
-5. Local Codex workers claim tasks assigned to their nickname, edit local code projects such as QXunPortal, build previews, upload previews through Hermes-issued URLs, and report results back to Hermes.
-
-Do not ask the user for a local Docs repository path during worker init. Docs is a cloud-side source of truth managed by Hermes. Local Codex only needs local code project paths for projects it can execute, such as `qxun`.
-
 ## What This Skill Does
 
 - Initializes local worker config at `~/.hermes-codex-worker/config.json`.
-- Registers/heartbeats this Codex worker with the cloud Hermes Worker API.
-- Claims tasks assigned to this worker, either manually or on a timer.
-- Resolves tasks to configured local project paths.
-- Runs Codex in the target project for automatic task execution.
-- Builds local `dist`/HTML previews before merge.
-- Uploads preview files through Hermes-issued presigned COS upload URLs.
-- Reports results, commits, and preview URLs back to Hermes.
+- Pulls the CNB Docs repository used as the shared Hermes task queue.
+- Claims one `tasks/*.md` task assigned to this worker by changing `status: open` to `status: claimed` and pushing that commit.
+- Runs Codex on the Docs repository for document/product tasks when no local code project is configured.
+- Optionally resolves tasks to configured local project paths for frontend/backend code work.
+- Optionally builds local `dist`/HTML previews before merge.
+- Reports result status, summaries, commits, and preview URLs back to the Docs task Markdown.
 
-Default API:
+Default Docs queue:
 
 ```text
-http://81.71.29.84:8787
+https://cnb.cool/yztx_qxun/Docs
+tasks/*.md
 ```
 
 ## Initialize
 
-When the user says `Hermes worker init`, `加入 Hermes worker`, or wants to connect local Codex to Feishu:
+When the user says `Hermes worker init <worker_id>` or `使用 hermes-worker-qxun 初始化 Hermes worker`:
 
-1. If the user did not provide a Feishu nickname / worker id, ask exactly:
-
-```text
-请关联你的飞书昵称
-```
-
-2. Use that Feishu nickname as the worker id.
-3. If the current working directory is QXunPortal, run the short init command from that directory:
+1. If no worker id is provided, ask: `请关联你的飞书昵称`.
+2. Run:
 
 ```bash
-python3 scripts/init_worker.py --worker <飞书昵称>
+python3 scripts/init_worker.py --worker jerry
 ```
 
-The script auto-detects QXunPortal and configures:
+This does not require a local product/code repository. It only stores the local worker id and the Docs queue configuration.
 
-```text
-qxun=<current QXunPortal path>
-build=pnpm build:h5:candidate
-dist=apps/h5-candidate/dist
-```
-
-4. If the current directory is not QXunPortal, pass only the local code project path and build settings:
-
-```bash
-python3 scripts/init_worker.py \
-  --worker <飞书昵称> \
-  --project qxun=/path/to/QXunPortal \
-  --build qxun="pnpm build:h5:candidate" \
-  --dist qxun=apps/h5-candidate/dist
-```
-
-Do not configure a local `docs` path for Feishu requirement intake. Hermes cloud writes Markdown to the Docs repository.
-
-The init script also supports interactive setup from a terminal:
-
-```bash
-python3 scripts/init_worker.py
-```
-
-It will prompt:
-
-```text
-请关联你的飞书昵称，用于 Hermes 将 Feishu 任务分配给这台本地 Codex worker。
-飞书昵称:
-```
-
-To update project config after initialization, run:
+If this worker should also handle a local code project, configure it explicitly:
 
 ```bash
 python3 scripts/configure_project.py \
   --project qxun=/path/to/QXunPortal \
-  --build qxun="pnpm build" \
-  --dist qxun=dist
+  --build qxun="pnpm build:h5:candidate" \
+  --dist qxun=apps/h5-candidate/dist
 ```
 
 ## Start Automatic Worker
 
 When the user says `Hermes worker start` or `启动 Hermes 自动 worker`:
 
-1. Confirm the worker has been initialized and local project config exists.
-2. Install a timer that runs one automatic worker tick every 2 minutes:
+1. Confirm the worker has been initialized.
+2. Install a timer that runs one automatic Docs queue tick every 2 minutes:
 
 ```bash
 python3 scripts/install_scheduler.py --interval 120 --exec-codex --install --load
@@ -108,12 +59,12 @@ python3 scripts/install_scheduler.py --interval 120 --exec-codex --install --loa
 
 The scheduler runs `scripts/worker_tick.py --exec-codex`. Each tick:
 
-1. Sends heartbeat to Hermes.
-2. Claims one task assigned to this worker.
-3. Resolves `task.project` to `local_projects[project]`.
+1. Pulls the Docs queue repository.
+2. Finds one `tasks/*.md` with `status: open` and `assignee: <worker_id>`.
+3. Claims it by committing `status: claimed`, `claimed_by`, and `claimed_at`.
 4. Writes the task and a Codex prompt under `~/.hermes-codex-worker/runs/<task_id>/`.
-5. Runs `codex exec` inside the target local project.
-6. The Codex run completes the task, builds preview, uploads it, and reports the result.
+5. Runs `codex exec` in the configured local project when available, otherwise in the Docs repository.
+6. The Codex run completes the task and reports the result back to the task Markdown.
 
 To run one tick manually:
 
@@ -140,9 +91,9 @@ python3 scripts/worker_runner.py
 2. If it returns `has_task: false`, stop.
 3. If it returns a task, read the saved task file shown in the output.
 4. Complete the task according to `task.type`:
-   - `requirement`: update a Markdown requirement document.
-   - `bug`: reproduce/fix if project code is available, or write a bug issue draft/result.
-   - `preview`: modify/build the frontend and upload preview if configured.
+   - `requirement`: update the Docs Markdown or the configured project.
+   - `bug`: reproduce/fix if the relevant project is configured, or mark blocked with missing project details.
+   - `preview`: modify/build/upload only when a local project build is configured; otherwise mark blocked.
 
 For automatic execution, prefer `scripts/worker_tick.py --exec-codex` over manually running `worker_runner.py`.
 
@@ -213,17 +164,20 @@ Minimum content:
 {
   "worker_id": "jerry",
   "server_api": "http://81.71.29.84:8787",
-  "local_projects": {
-    "qxun": "/Users/name/Documents/app/QXunPortal"
+  "docs_queue": {
+    "repo_url": "https://cnb.cool/yztx_qxun/Docs",
+    "repo_dir": "/Users/name/.hermes-codex-worker/docs-repo",
+    "task_dir": "tasks"
   },
+  "local_projects": {},
   "project_builds": {
     "qxun": {
-      "build_command": "pnpm build:h5:candidate",
-      "dist_dir": "apps/h5-candidate/dist"
+      "build_command": "pnpm build",
+      "dist_dir": "dist"
     }
   }
 }
 ```
 
-Do not store CNB tokens or server SSH keys in this config.
+Do not store CNB tokens or server SSH keys in this config. Git authentication should use the user's existing Git credential helper or `~/.netrc`.
 Do not store COS permanent keys in this config; use Hermes-issued temporary upload URLs.
