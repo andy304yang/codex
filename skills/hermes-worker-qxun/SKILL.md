@@ -74,6 +74,8 @@ The scheduler runs `scripts/worker_tick.py --exec-codex`. Each tick:
 5. Runs `codex exec` in the configured local project when available, otherwise in the Docs repository.
 6. The Codex run completes the task and reports the result back to the task Markdown.
 
+Automatic preview workers need network access for preview upload and Docs result push, so the scheduler defaults Codex execution to `danger-full-access`.
+
 To run one tick manually:
 
 ```bash

@@ -100,8 +100,6 @@ def run_codex(
         str(CONFIG_DIR),
         "--sandbox",
         sandbox,
-        "--ask-for-approval",
-        "never",
     ]
     if model:
         command.extend(["--model", model])

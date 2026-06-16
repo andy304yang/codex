@@ -55,7 +55,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--interval", type=int, default=120, help="Seconds between worker ticks.")
     parser.add_argument("--exec-codex", action="store_true", help="Let each claimed task run codex exec.")
     parser.add_argument("--codex-bin", default=shutil.which("codex") or "codex")
-    parser.add_argument("--sandbox", default="workspace-write", choices=["read-only", "workspace-write", "danger-full-access"])
+    parser.add_argument("--sandbox", default="danger-full-access", choices=["read-only", "workspace-write", "danger-full-access"])
     parser.add_argument("--install", action="store_true", help="Write LaunchAgent plist.")
     parser.add_argument("--load", action="store_true", help="Load/start the LaunchAgent after writing.")
     parser.add_argument("--uninstall", action="store_true", help="Unload and remove the LaunchAgent.")
