@@ -59,22 +59,27 @@ python3 scripts/configure_project.py \
 When the user says `Hermes worker start` or `启动 Hermes 自动 worker`:
 
 1. Confirm the worker has been initialized.
-2. Install a timer that runs one automatic Docs queue tick every 2 minutes:
-
-```bash
-python3 scripts/install_scheduler.py --interval 120 --exec-codex --install --load
-```
-
-The scheduler runs `scripts/worker_tick.py --exec-codex`. Each tick:
+2. Prefer a Codex App automation over a background LaunchAgent. The automation should run in the current thread every 2 minutes and only do claim/review:
 
 1. Pulls the Docs queue repository.
 2. Finds one `tasks/*.md` with `status: open` and `assignee: <worker_id>`.
 3. Claims it by committing `status: claimed`, `claimed_by`, and `claimed_at`.
-4. Writes the task and a Codex prompt under `~/.hermes-codex-worker/runs/<task_id>/`.
-5. Runs `codex exec` in the configured local project when available, otherwise in the Docs repository.
-6. The Codex run completes the task and reports the result back to the task Markdown.
+4. Displays the task id, requirement, project/type, and Docs path to the user.
+5. Stops and asks whether the user agrees to start modifying local code.
 
-Automatic preview workers need network access for preview upload and Docs result push, so the scheduler defaults Codex execution to `danger-full-access`.
+Do not run `worker_tick.py --exec-codex` from the default automation. Code changes, builds, preview uploads, and result submission happen only after the user approves the claimed task.
+
+The claim-only command is:
+
+```bash
+python3 scripts/worker_runner.py
+```
+
+The legacy macOS LaunchAgent scheduler still exists for fully unattended experiments, but do not use it unless the user explicitly asks for unattended execution:
+
+```bash
+python3 scripts/install_scheduler.py --interval 120 --exec-codex --install --load
+```
 
 To run one tick manually:
 
@@ -105,7 +110,7 @@ python3 scripts/worker_runner.py
    - `bug`: reproduce/fix if the relevant project is configured, or mark blocked with missing project details.
    - `preview`: modify/build/upload only when a local project build is configured; otherwise mark blocked.
 
-For automatic execution, prefer `scripts/worker_tick.py --exec-codex` over manually running `worker_runner.py`.
+For normal Codex App automation, use `scripts/worker_runner.py` only. Use `scripts/worker_tick.py --exec-codex` only after the user explicitly approves execution for a claimed task.
 
 ## Build Preview
 
