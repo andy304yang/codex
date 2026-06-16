@@ -135,7 +135,8 @@ Upload the built `dist`/HTML through Hermes-issued presigned COS upload URLs:
 
 ```bash
 python3 scripts/upload_preview.py \
-  --manifest ~/.hermes-codex-worker/runs/<task_id>/preview_manifest.json
+  --manifest ~/.hermes-codex-worker/runs/<task_id>/preview_manifest.json \
+  --fallback-cos
 ```
 
 The upload flow expects Hermes to provide:
@@ -144,6 +145,27 @@ The upload flow expects Hermes to provide:
 - `POST /api/previews/complete`: marks upload complete and returns the final `preview_url`.
 
 Do not store COS permanent keys in local config. Hermes should issue short-lived, prefix-scoped upload URLs for the current `task_id/build_id`.
+
+While the Hermes preview API is being brought up, `--fallback-cos` can upload directly to Tencent COS with the official `cos-python-sdk-v5` package:
+
+```bash
+python3 -m pip install cos-python-sdk-v5
+```
+
+Direct COS upload reads these environment variables:
+
+```text
+TENCENTCLOUD_SECRET_ID
+TENCENTCLOUD_SECRET_KEY
+HERMES_COS_BUCKET=xqunbot-1330713835
+HERMES_COS_REGION=ap-guangzhou
+HERMES_COS_PREFIX=hermes-previews
+HERMES_COS_SIGNED_GET_EXPIRES=604800
+```
+
+The bucket may remain private. Direct COS upload writes the files and stores a temporary signed GET URL as `preview_url`.
+
+Do not commit these credentials or write them into skill config. Put them in the automation environment, the local shell environment, or the Hermes server environment only.
 
 ## Report Result
 

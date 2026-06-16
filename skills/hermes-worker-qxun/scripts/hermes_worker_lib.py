@@ -427,7 +427,7 @@ python3 {shell_join([str(build_script), "--task-file", str(task_run_dir(task) / 
 5. Upload the preview artifact with:
 
 ```bash
-python3 {shell_join([str(upload_script), "--manifest", str(task_run_dir(task) / "preview_manifest.json")])}
+python3 {shell_join([str(upload_script), "--manifest", str(task_run_dir(task) / "preview_manifest.json"), "--fallback-cos"])}
 ```
 
 6. Submit the final Hermes result with `{submit_script}`. Include the preview_url if upload succeeds."""

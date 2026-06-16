@@ -98,6 +98,11 @@ def main(argv: list[str]) -> int:
             "repo_dir": str(Path(args.docs_dir).expanduser()),
             "task_dir": args.docs_task_dir,
         },
+        "cos_upload": existing.get("cos_upload") if isinstance(existing.get("cos_upload"), dict) else {
+            "bucket": "xqunbot-1330713835",
+            "region": "ap-guangzhou",
+            "prefix": "hermes-previews",
+        },
         "local_projects": local_projects,
         "project_builds": project_builds,
     }
