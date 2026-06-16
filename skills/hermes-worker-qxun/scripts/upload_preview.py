@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import sys
 import time
 import urllib.parse
@@ -178,10 +179,15 @@ def upload_to_cos(manifest: dict[str, Any], config: dict[str, Any]) -> dict[str,
     for file_info in manifest["files"]:
         relative_path = str(file_info["path"]).lstrip("/")
         key = f"{prefix}/{relative_path}"
+        body = (dist_path / relative_path).read_bytes()
+        if relative_path == "index.html":
+            html = body.decode("utf-8")
+            html = re.sub(r'((?:src|href)=["\'])/', r"\1./", html)
+            body = html.encode("utf-8")
         put_kwargs = {
             "Bucket": cos["bucket"],
             "Key": key,
-            "Body": (dist_path / relative_path).read_bytes(),
+            "Body": body,
             "ContentType": file_info.get("content_type") or "application/octet-stream",
         }
         if cos["acl"]:
